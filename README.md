@@ -24,6 +24,8 @@ github:garyleelty/dsh-poker
 
 （完整 URL `https://github.com/garyleelty/dsh-poker` 也可以。）Harness 会用 pnpm 把这个仓库装进当前 profile，并把 `@local/texas-poker` 加进 `dsh.profile.bundles`，然后重启即可。
 
+git 形式的安装会钉在安装当时的 commit 上，想升级要重新装一次：在 profile 目录里 `pnpm update @local/texas-poker`（或者把插件卸掉再装一遍），然后重启 Harness。
+
 ### 方式二：手动
 
 ```bash
