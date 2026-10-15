@@ -14,19 +14,28 @@
 
 ## 安装
 
-### 方式一：让 Harness 自己装（推荐）
+### 方式一：npm（推荐）
 
-在 Harness 的插件管理里安装 bundle，spec 填：
+已发布在 npm：**`dsh-texas-poker`**。在 Harness 的插件管理里安装 bundle，spec 填：
+
+```
+dsh-texas-poker
+```
+
+Harness 会用 pnpm 把它装进当前 profile，并把 `dsh-texas-poker` 加进 `dsh.profile.bundles`，然后重启即可。升级：`pnpm update dsh-texas-poker` 再重启。
+
+### 方式二：直接从 GitHub 装
+
+spec 填下面任意一个，效果和 npm 一样（Harness 用 pnpm 从仓库克隆）：
 
 ```
 github:garyleelty/dsh-poker
+https://github.com/garyleelty/dsh-poker
 ```
 
-（完整 URL `https://github.com/garyleelty/dsh-poker` 也可以。）Harness 会用 pnpm 把这个仓库装进当前 profile，并把 `@local/texas-poker` 加进 `dsh.profile.bundles`，然后重启即可。
+git 形式的安装会钉在安装当时的 commit 上，想升级要重新装一次（`pnpm update dsh-texas-poker`，或卸掉再装一遍），然后重启 Harness。
 
-git 形式的安装会钉在安装当时的 commit 上，想升级要重新装一次：在 profile 目录里 `pnpm update @local/texas-poker`（或者把插件卸掉再装一遍），然后重启 Harness。
-
-### 方式二：手动
+### 方式三：克隆到本地改代码
 
 ```bash
 git clone https://github.com/garyleelty/dsh-poker.git ~/code/dsh-poker
@@ -38,14 +47,14 @@ git clone https://github.com/garyleelty/dsh-poker.git ~/code/dsh-poker
 {
   "dependencies": {
     // 必须是绝对路径；link: 会跟着本地改动实时生效
-    "@local/texas-poker": "link:/Users/你/code/dsh-poker"
+    "dsh-texas-poker": "link:/Users/你/code/dsh-poker"
   },
   "dsh": {
     "profile": {
       "bundles": [
         "@deepseek-ai/dsh-base",
         "@deepseek-ai/dsh-web-app",
-        "@local/texas-poker"   // ← 加这一行
+        "dsh-texas-poker"   // ← 加这一行
       ]
     }
   }
@@ -53,6 +62,8 @@ git clone https://github.com/garyleelty/dsh-poker.git ~/code/dsh-poker
 ```
 
 然后在该 profile 目录下 `pnpm install`，重启 Harness。装好后侧边栏底部会多出一个德州扑克图标。
+
+> 包名出现在四个地方，改名字的话要一起改：`package.json` 的 `name`、`cordis.patch.yml` 里 insert 行的 `name`、`client.js` 里 `__ModuleLoader__.load({ id })`、以及 profile 的依赖名和 `dsh.profile.bundles`。
 
 ## 配置
 

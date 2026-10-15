@@ -1,9 +1,37 @@
 {
-  "name": "@local/texas-poker",
+  "name": "dsh-texas-poker",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
-  "description": "A playable no-limit Texas Hold'em table with an AI coach, rendered as a Harness panel.",
+  "description": "A playable no-limit Texas Hold'em table with an AI coach, rendered as a DeepSeek Harness panel.",
+  "license": "MIT",
+  "author": "garyleelty",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/garyleelty/dsh-poker.git"
+  },
+  "homepage": "https://github.com/garyleelty/dsh-poker#readme",
+  "bugs": {
+    "url": "https://github.com/garyleelty/dsh-poker/issues"
+  },
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "harness",
+    "dsh",
+    "dsh-plugin",
+    "texas-holdem",
+    "poker",
+    "game",
+    "panel",
+    "ai",
+    "llm"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "meta": {
     "title": "德州扑克",
     "description": "在 Harness 里玩无限注德州扑克，AI 对手陪桌，并可向 AI 教练要一手牌的建议。"

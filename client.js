@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: '@local/texas-poker',
+  id: 'dsh-texas-poker',
   factory(require) {
     const React = require('react');
     const h = React.createElement;

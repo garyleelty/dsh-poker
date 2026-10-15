@@ -1,6 +1,6 @@
 - insert:
     - id: texas-poker
-      name: '@local/texas-poker'
+      name: 'dsh-texas-poker'
       config:
         stack: 1000
         smallBlind: 5
