@@ -14,28 +14,28 @@
 
 ## 安装
 
-### 方式一：直接从 GitHub 装（推荐）
+### 方式一：npm（推荐）
 
-在 Harness 的插件管理里安装 bundle，spec 填下面任意一个：
+已发布在 npm：**`dsh-texas-poker`**。在 Harness 的插件管理里安装 bundle，spec 填：
+
+```
+dsh-texas-poker
+```
+
+Harness 会用 pnpm 把它装进当前 profile，并把 `dsh-texas-poker` 加进 `dsh.profile.bundles`，然后重启即可。升级：`pnpm update dsh-texas-poker` 再重启。
+
+（`0.0.0-stage` 是 npm 给新包做首次自动审核时生成的占位版本，`latest` 已经指向 1.0.0，正常安装不会碰到它。）
+
+### 方式二：直接从 GitHub 装
+
+spec 填下面任意一个，效果和 npm 一样（Harness 用 pnpm 从仓库克隆）：
 
 ```
 github:garyleelty/dsh-poker
 https://github.com/garyleelty/dsh-poker
 ```
 
-Harness 会用 pnpm 从仓库克隆并装进当前 profile，把 `dsh-texas-poker` 加进 `dsh.profile.bundles`，然后重启即可。
-
 git 形式的安装会钉在安装当时的 commit 上，想升级要重新装一次（`pnpm update dsh-texas-poker`，或卸掉再装一遍），然后重启 Harness。
-
-### 方式二：npm
-
-包名占的是 **`dsh-texas-poker`**，但**目前还不要用 npm 安装**：npm 对新建包启用了 staged publishing，首次发布的版本要先由 maintainer 在 npm 上批准才会生效，在那之前 registry 上只有一个 `0.0.0-stage` 占位空壳。
-
-```
-# 等这里不再是 0.0.0-stage 之后再用：
-npm view dsh-texas-poker version
-dsh-texas-poker            # ← 插件管理里填这个 spec
-```
 
 ### 方式三：克隆到本地改代码
 
