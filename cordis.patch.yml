@@ -1,0 +1,13 @@
+- insert:
+    - id: texas-poker
+      name: '@local/texas-poker'
+      config:
+        stack: 1000
+        smallBlind: 5
+        bigBlind: 10
+        opponents: 3
+        equityTrials: 400
+        adviceMaxTokens: 400
+        # Opponent "thinking" time: a multiplier on the built-in bands
+        # (a check 250-650ms, a hard decision 550-1400ms). 1 = default, 0 = instant.
+        thinkPace: 1

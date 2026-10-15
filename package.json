@@ -1,0 +1,38 @@
+{
+  "name": "@local/texas-poker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A playable no-limit Texas Hold'em table with an AI coach, rendered as a Harness panel.",
+  "meta": {
+    "title": "德州扑克",
+    "description": "在 Harness 里玩无限注德州扑克，AI 对手陪桌，并可向 AI 教练要一手牌的建议。"
+  },
+  "icon": "./icon.svg",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib/*.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "docs"
+  ],
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  }
+}
