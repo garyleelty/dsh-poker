@@ -1,6 +1,5 @@
 import { decide } from './lib/ai.js';
 import { Table } from './lib/table.js';
-import { equityPercent, makeRng } from './lib/odds.js';
 
 /** Route paths shared with the browser half; registered on the Host web server. */
 const STATE_ROUTE = '/poker/state';
@@ -243,9 +242,6 @@ function describeForCoach(table, snapshot, config) {
   const streetName = { preflop: '翻牌前', flop: '翻牌', turn: '转牌', river: '河牌' }[table.street];
   const legal = snapshot.legal;
   const callCost = legal.callCost ?? 0;
-  const equity = snapshot.equity
-    ? equityPercent(human.hole, table.board, Math.max(1, table.liveSeats().length - 1), config.equityTrials, makeRng(1))
-    : null;
   const pct = (v) => `${Math.round(v * 100)}%`;
 
   const lines = [
