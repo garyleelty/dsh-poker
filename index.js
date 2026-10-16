@@ -160,15 +160,20 @@ export function apply(ctx, rawConfig) {
   });
 
   route(NEW_HAND_ROUTE, async (req, res) => {
-    const body = await readBody(req);
-    const seed = (Date.now() & 0x7fffffff) >>> 0;
-    table = new Table({
-      seed,
-      opponents: clampInt(config.opponents, 1, 5),
-      smallBlind: config.smallBlind,
-      bigBlind: config.bigBlind,
-    });
-    for (const seat of table.seats) seat.stack = clampInt(config.stack, 100, 100000);
+    await readBody(req);
+    // A live table plays the next hand on the same chips — that is what a cash
+    // game is. Only an endgame (busted, swept, or unfundable) deals a fresh
+    // table, so losing a hand no longer resets every stack to the start.
+    if (table.result?.kind) {
+      const seed = (Date.now() & 0x7fffffff) >>> 0;
+      table = new Table({
+        seed,
+        opponents: clampInt(config.opponents, 1, 5),
+        smallBlind: config.smallBlind,
+        bigBlind: config.bigBlind,
+      });
+      for (const seat of table.seats) seat.stack = clampInt(config.stack, 100, 100000);
+    }
     table.startHand();
     await runAiUntilHuman();
     sendJson(res, 200, withState());

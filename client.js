@@ -310,6 +310,12 @@ window.__ModuleLoader__.load({
         'coach.by': 'AI 教练',
         'coach.rules': '规则引擎',
         toact: '你的回合',
+        'end.bust': '你的筹码已输光',
+        'end.sweep': '你赢下了整桌',
+        'end.bust.detail': '再买一次就能继续上桌',
+        'end.sweep.detail': '所有对手都被你清空了',
+        'rebuy': '重新买入',
+        'new.game': '再来一局',
       },
       en: {
         panel: 'Texas Hold’em',
@@ -369,6 +375,12 @@ window.__ModuleLoader__.load({
         'coach.by': 'AI coach',
         'coach.rules': 'Rules engine',
         toact: 'Your turn',
+        'end.bust': 'You are out of chips',
+        'end.sweep': 'You swept the table',
+        'end.bust.detail': 'Rebuy to sit back down',
+        'end.sweep.detail': 'Every opponent is broke',
+        rebuy: 'Rebuy',
+        'new.game': 'New game',
       },
     };
 
@@ -693,6 +705,10 @@ window.__ModuleLoader__.load({
       const me = state.seats.find((s) => s.human);
       const iWon = isOver
         && (state.result?.winners ?? []).some((w) => w.name === (me ? me.name : ''));
+      // An endgame is the table's final word (busted or swept), as opposed to a
+      // settled hand, which just plays the next one on the same chips.
+      const endKind = state.result?.kind ?? null;
+      const ended = isOver && (endKind === 'bust' || endKind === 'sweep');
 
       return h(
         'div',
@@ -719,7 +735,7 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'pk-actionbar' },
-          isOver
+          ended
             ? h(
               'div',
               { className: 'pk-result' },
@@ -728,26 +744,54 @@ window.__ModuleLoader__.load({
                 { className: 'pk-result__line' },
                 h(
                   'span',
-                  { className: 'pk-result__verdict ' + (iWon ? 'pk-result__verdict--win' : 'pk-result__verdict--lose') },
-                  iWon
-                    ? t('result.you.win', {
-                      amount: state.result.winners.find((w) => w.name === me.name).amount,
-                    })
-                    : t('result.you.lose'),
+                  {
+                    className: 'pk-result__verdict '
+                      + (endKind === 'sweep' ? 'pk-result__verdict--win' : 'pk-result__verdict--lose'),
+                  },
+                  endKind === 'sweep' ? t('end.sweep') : t('end.bust'),
                 ),
                 h('span', { className: 'pk-result__detail' },
-                  (state.result?.winners ?? [])
-                    .map((w) => (w.name === (me ? me.name : '')
-                      ? t('result.you.hand', { hand: w.hand ?? '' })
-                      : t('result.detail', { name: w.name, hand: w.hand ?? '' })))
-                    .join('，')),
+                  endKind === 'sweep' ? t('end.sweep.detail') : t('end.bust.detail')),
               ),
               h(
                 'div',
                 { className: 'pk-result__line' },
-                h('button', { className: 'pk-btn pk-btn--primary', onClick: onNext }, t('next.hand')),
+                h('button', {
+                  className: 'pk-btn pk-btn--primary',
+                  disabled: busy,
+                  onClick: onNext,
+                }, endKind === 'sweep' ? t('new.game') : t('rebuy')),
               ),
             )
+            : isOver
+              ? h(
+                'div',
+                { className: 'pk-result' },
+                h(
+                  'div',
+                  { className: 'pk-result__line' },
+                  h(
+                    'span',
+                    { className: 'pk-result__verdict ' + (iWon ? 'pk-result__verdict--win' : 'pk-result__verdict--lose') },
+                    iWon
+                      ? t('result.you.win', {
+                        amount: state.result.winners.find((w) => w.name === me.name).amount,
+                      })
+                      : t('result.you.lose'),
+                  ),
+                  h('span', { className: 'pk-result__detail' },
+                    (state.result?.winners ?? [])
+                      .map((w) => (w.name === (me ? me.name : '')
+                        ? t('result.you.hand', { hand: w.hand ?? '' })
+                        : t('result.detail', { name: w.name, hand: w.hand ?? '' })))
+                      .join('，')),
+                ),
+                h(
+                  'div',
+                  { className: 'pk-result__line' },
+                  h('button', { className: 'pk-btn pk-btn--primary', onClick: onNext }, t('next.hand')),
+                ),
+              )
             : myTurn
               ? h(Controls, { state, t, busy, onAction })
               : h(
