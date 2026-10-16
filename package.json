@@ -1,6 +1,6 @@
 {
   "name": "dsh-texas-poker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "A playable no-limit Texas Hold'em table with an AI coach, rendered as a DeepSeek Harness panel.",
   "license": "MIT",
@@ -52,7 +52,9 @@
   ],
   "dsh": {
     "manifestVersion": 1,
-    "bundle": { "patch": "./cordis.patch.yml" },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "immediately": true,
