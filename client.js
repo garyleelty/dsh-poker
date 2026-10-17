@@ -567,6 +567,7 @@ window.__ModuleLoader__.load({
         'result.you.win': '你拿下这一手 +{amount}',
         'result.you.lose': '这一手落空',
         'result.detail': '{name} 以 {hand} 胜出',
+        'result.join': '，',
         'result.you.hand': '你拿到 {hand}',
         'result.foldWin': '对手全部弃牌',
         'result.winNoHand': '{name} 拿下底池',
@@ -640,6 +641,11 @@ window.__ModuleLoader__.load({
         'ai.thought.probe': '试探性下注',
         'ai.thought.check': '胜率 {equity}，先看牌',
         'seat.you': '你',
+        'seat.name.aimee': '小艾',
+        'seat.name.oldk': '老K',
+        'seat.name.amon': '阿蒙',
+        'seat.name.jack': '杰克',
+        'seat.name.phil': '菲尔',
       },
       en: {
         panel: 'Texas Hold’em',
@@ -689,6 +695,7 @@ window.__ModuleLoader__.load({
         'result.you.win': 'You win this hand +{amount}',
         'result.you.lose': 'Hand lost',
         'result.detail': '{name} wins with {hand}',
+        'result.join': ', ',
         'result.you.hand': 'you had {hand}',
         'result.foldWin': 'Everyone folded',
         'result.winNoHand': '{name} wins the pot',
@@ -762,6 +769,11 @@ window.__ModuleLoader__.load({
         'ai.thought.probe': 'Probe bet',
         'ai.thought.check': 'Equity {equity}, taking a free look',
         'seat.you': 'You',
+        'seat.name.aimee': 'Aimee',
+        'seat.name.oldk': 'Old K',
+        'seat.name.amon': 'Amon',
+        'seat.name.jack': 'Jack',
+        'seat.name.phil': 'Phil',
       },
     };
 
@@ -796,6 +808,16 @@ window.__ModuleLoader__.load({
     function styleForSeat(seat) {
       if (seat.style) return seat.style;
       return FALLBACK_STYLES[Math.max(0, (seat.id - 1) % FALLBACK_STYLES.length)];
+    }
+
+    /** Localized seat name, falling back to the Host's Chinese name. */
+    function seatName(t, seat) {
+      if (!seat) return '';
+      if (seat.nameKey) {
+        const text = t(seat.nameKey);
+        if (text !== seat.nameKey) return text;
+      }
+      return seat.name ?? '';
     }
 
     /** Localized personality tag, falling back to the Host's Chinese label. */
@@ -1037,7 +1059,7 @@ window.__ModuleLoader__.load({
             title: style?.hint ?? undefined,
             'aria-hidden': true,
           }, isHero ? t('seat.you') : (seat.name?.[0] ?? '?')),
-          h('span', { className: 'pk-seat__name' }, seat.name),
+          h('span', { className: 'pk-seat__name' }, seatName(t, seat)),
           style
             ? h('span', {
               className: 'pk-seat__style',
@@ -1655,11 +1677,12 @@ window.__ModuleLoader__.load({
                             ? t('result.you.hand', { hand: handLabel(t, w.hand) })
                             : t('result.foldWin');
                         }
+                        const label = seatName(t, state.seats.find((s) => s.name === w.name));
                         return w.hand
-                          ? t('result.detail', { name: w.name, hand: handLabel(t, w.hand) })
-                          : t('result.winNoHand', { name: w.name });
+                          ? t('result.detail', { name: label, hand: handLabel(t, w.hand) })
+                          : t('result.winNoHand', { name: label });
                       })
-                      .join('，')),
+                      .join(t('result.join'))),
                 ),
                 h(
                   'div',
