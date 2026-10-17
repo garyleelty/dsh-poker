@@ -1,4 +1,4 @@
-import { decide } from './lib/ai.js';
+import { decide, styleFor } from './lib/ai.js';
 import { Table } from './lib/table.js';
 
 /** Route paths shared with the browser half; registered on the Host web server. */
@@ -6,12 +6,13 @@ const STATE_ROUTE = '/poker/state';
 const ACTION_ROUTE = '/poker/action';
 const NEW_HAND_ROUTE = '/poker/new-hand';
 const ADVICE_ROUTE = '/poker/advice';
+const HISTORY_ROUTE = '/poker/history';
 
 const DEFAULT_CONFIG = {
   stack: 1000,
   smallBlind: 5,
   bigBlind: 10,
-  opponents: 3,
+  opponents: 5,
   equityTrials: 400,
   adviceMaxTokens: 400,
   /**
@@ -20,6 +21,13 @@ const DEFAULT_CONFIG = {
    * pace; 0 removes the pause entirely.
    */
   thinkPace: 1,
+};
+
+/** Clamp one numeric config value into [min, max], falling back on NaN. */
+function clampNumber(value, min, max, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
 };
 
 /**
@@ -41,7 +49,7 @@ function pacingFactor(value) {
 
 
 /** Services this plugin needs before it activates. */
-export const inject = ['llm', 'agentDefaultModel', 'webServer'];
+export const inject = ['llm', 'agentDefaultModel', 'webServer', 'storage'];
 
 const SYSTEM_PROMPT = [
   '你是一名资深德州扑克教练，用简体中文回答。',
@@ -52,7 +60,15 @@ const SYSTEM_PROMPT = [
 ].join('\n');
 
 export function apply(ctx, rawConfig) {
-  const config = { ...DEFAULT_CONFIG, ...(rawConfig ?? {}) };
+  const config = {
+    ...DEFAULT_CONFIG,
+    ...(rawConfig ?? {}),
+    // Blinds must be positive integers or chip math goes negative; trials
+    // must be at least 1 or equity sampling divides by zero.
+    smallBlind: clampNumber(rawConfig?.smallBlind, 1, 100000, DEFAULT_CONFIG.smallBlind),
+    bigBlind: clampNumber(rawConfig?.bigBlind, 1, 100000, DEFAULT_CONFIG.bigBlind),
+    equityTrials: Math.round(clampNumber(rawConfig?.equityTrials, 50, 20000, DEFAULT_CONFIG.equityTrials)),
+  };
   // 0 or a negative value turns the pacing off entirely.
   thinkMs.factor = pacingFactor(config.thinkPace);
   let table = new Table({
@@ -62,6 +78,156 @@ export function apply(ctx, rawConfig) {
     bigBlind: config.bigBlind,
   });
   for (const seat of table.seats) seat.stack = clampInt(config.stack, 100, 100000);
+
+  // Hand archive. The table publishes one plain record per settled hand; this
+  // file keeps those records across rebuys and across Harness restarts. Writes
+  // go through the Host's storage service (json backend) as one atomic global
+  // document, so there is no bespoke file path or write protocol here.
+  const HISTORY_UNIT = 'dsh_poker_history';
+  const HISTORY_VERSION = 1;
+  const HISTORY_LIMIT = 200;
+  let archive = [];
+  const archived = new Set();
+  // IDs start above any plausible stored count so a hand settled while the
+  // archive is still loading can never collide with a stored id; the loader
+  // re-bases `nextId` onto the real maximum once the unit is open.
+  let nextId = 1_000_000;
+  let rebuyPending = false;
+  let storageUnit = null;
+  let storageReady = Promise.resolve();
+  let saveChain = Promise.resolve();
+
+  const saveArchive = () => {
+    saveChain = saveChain.then(async () => {
+      await storageReady;
+      if (!storageUnit) return;
+      await storageUnit.setGlobal({
+        version: HISTORY_VERSION,
+        nextId,
+        hands: archive,
+      });
+    }).catch((error) => {
+      ctx.logger?.warn?.(`poker: history save failed: ${String(error?.message ?? error)}`);
+    });
+    return saveChain;
+  };
+
+  // Open the durable unit without blocking the first hand. The backend may not
+  // have registered yet when a bundle activates, so retry briefly by name.
+  storageReady = (async () => {
+    try {
+      let backend = null;
+      for (let attempt = 0; attempt < 20 && !backend; attempt += 1) {
+        const names = ctx.storage?.backend?.names?.() ?? [];
+        const name = names.includes('json') ? 'json' : names[0];
+        if (name) {
+          try {
+            backend = ctx.storage.backend.get(name);
+          } catch {
+            backend = null;
+          }
+        }
+        if (!backend) {
+          await new Promise((resolve) => { setTimeout(resolve, 50); });
+        }
+      }
+      if (!backend?.kv?.open) return;
+      // A plugin reload can race the previous handle's close; retry briefly so
+      // HMR does not silently drop the durable archive for a whole session.
+      let unit = null;
+      for (let attempt = 0; attempt < 5 && !unit; attempt += 1) {
+        try {
+          unit = await backend.kv.open({
+            name: HISTORY_UNIT,
+            version: HISTORY_VERSION,
+            tables: [],
+            hasGlobal: true,
+            layout: 'single',
+          });
+        } catch (error) {
+          if (attempt === 4) throw error;
+          await new Promise((resolve) => { setTimeout(resolve, 120); });
+        }
+      }
+      if (!unit) return;
+      storageUnit = unit;
+      const snapshot = await unit.loadAll();
+      const global = snapshot?.global;
+      const loaded = global && global.version === HISTORY_VERSION && Array.isArray(global.hands)
+        ? global.hands
+        : [];
+      const byUid = new Map();
+      for (const hand of loaded) {
+        if (hand && typeof hand.uid === 'string' && hand.hero) {
+          byUid.set(hand.uid, hand);
+          archived.add(hand.uid);
+        }
+      }
+      for (const hand of archive) byUid.set(hand.uid, hand);
+      archive = [...byUid.values()]
+        .sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0))
+        .slice(-HISTORY_LIMIT);
+      let maxId = Number(global?.nextId) || 0;
+      for (const hand of archive) {
+        if (!Number.isSafeInteger(hand.id)) hand.id = maxId + 1;
+        maxId = Math.max(maxId, hand.id);
+      }
+      // Hands archived while loading sit above the safe-watermark start, so
+      // the rebase must never move `nextId` backwards.
+      nextId = Math.max(maxId, nextId);
+      saveArchive();
+    } catch (error) {
+      ctx.logger?.warn?.(`poker: history storage unavailable: ${String(error?.message ?? error)}`);
+    }
+  })();
+
+  ctx.effect(() => () => {
+    void storageReady.then(() => storageUnit?.close()).catch(() => {});
+  }, 'poker: history storage');
+
+  const collectHand = () => {
+    const record = table.lastHand;
+    if (!record || archived.has(record.uid)) return;
+    archived.add(record.uid);
+    archive.push({ ...record, id: ++nextId, rebuy: rebuyPending });
+    rebuyPending = false;
+    if (archive.length > HISTORY_LIMIT) {
+      const dropped = archive.splice(0, archive.length - HISTORY_LIMIT);
+      for (const hand of dropped) archived.delete(hand.uid);
+    }
+    saveArchive();
+  };
+
+  const freshTable = () => {
+    const seed = (Date.now() & 0x7fffffff) >>> 0;
+    const next = new Table({
+      seed,
+      opponents: clampInt(config.opponents, 1, 5),
+      smallBlind: config.smallBlind,
+      bigBlind: config.bigBlind,
+    });
+    for (const seat of next.seats) seat.stack = clampInt(config.stack, 100, 100000);
+    return next;
+  };
+
+  const historyPayload = () => {
+    const net = archive.reduce((sum, hand) => sum + hand.hero.net, 0);
+    const wins = archive.filter((hand) => hand.hero.net > 0).length;
+    const biggestPot = archive.reduce((max, hand) => Math.max(max, hand.pot), 0);
+    return {
+      hands: archive,
+      summary: {
+        hands: archive.length,
+        sessionHands: archive.length,
+        net,
+        wins,
+        winRate: archive.length > 0 ? wins / archive.length : 0,
+        biggestPot,
+        currentStack: table.seats[0].stack,
+        startStack: clampInt(config.stack, 100, 100000),
+      },
+    };
+  };
 
   const sendJson = (res, status, payload) => {
     const body = JSON.stringify(payload);
@@ -133,9 +299,31 @@ export function apply(ctx, rawConfig) {
     }
   };
 
+  const publicStyle = (id) => {
+    const style = styleFor(id);
+    return {
+      key: style.name,
+      label: style.label,
+      hint: style.hint,
+      color: style.color,
+    };
+  };
+
   const withState = () => {
+    // A poll can be the first request to observe a settled hand, so archive it
+    // before building the snapshot.
+    collectHand();
     const snapshot = table.snapshot();
+    snapshot.seats = snapshot.seats.map((seat) => (
+      seat.human ? seat : { ...seat, style: publicStyle(seat.id) }
+    ));
     snapshot.equity = table.humanEquity(config.equityTrials);
+    // The generic `legal` belongs to whoever acts now (often an AI). The
+    // client's "to call / pot odds" readout must describe the HUMAN's
+    // decision, so expose the hero's own view separately.
+    snapshot.heroLegal = table.phase === 'betting'
+      ? table.legalActions(0)
+      : { actions: [] };
     return snapshot;
   };
 
@@ -154,38 +342,49 @@ export function apply(ctx, rawConfig) {
     `poker: ${path}`,
   );
 
-  route(STATE_ROUTE, async (req, res) => {
-    sendJson(res, 200, withState());
-  });
+  /**
+   * Serialize every mutating route. A double click on "下一手" or two windows
+   * posting at once used to deal two hands back to back; queued instead of
+   * parallel, the second request simply observes the first hand's result.
+   */
+  let tableChain = Promise.resolve();
+  const serialized = (handler) => () => {
+    const run = tableChain.then(handler);
+    // Keep the chain alive even when a handler fails.
+    tableChain = run.catch(() => {});
+    return run;
+  };
 
-  route(NEW_HAND_ROUTE, async (req, res) => {
-    await readBody(req);
+  /** Deal the next hand: fresh table only on an endgame, then AI turns. */
+  const dealNextHand = async () => {
+    collectHand();
     // A live table plays the next hand on the same chips — that is what a cash
     // game is. Only an endgame (busted, swept, or unfundable) deals a fresh
     // table, so losing a hand no longer resets every stack to the start.
     if (table.result?.kind) {
-      const seed = (Date.now() & 0x7fffffff) >>> 0;
-      table = new Table({
-        seed,
-        opponents: clampInt(config.opponents, 1, 5),
-        smallBlind: config.smallBlind,
-        bigBlind: config.bigBlind,
-      });
-      for (const seat of table.seats) seat.stack = clampInt(config.stack, 100, 100000);
+      rebuyPending = table.result.kind === 'bust';
+      table = freshTable();
     }
     table.startHand();
     await runAiUntilHuman();
+    return withState();
+  };
+
+  route(STATE_ROUTE, async (req, res) => {
     sendJson(res, 200, withState());
   });
 
-  route(ACTION_ROUTE, async (req, res) => {
+  route(NEW_HAND_ROUTE, serialized(async (req, res) => {
+    await readBody(req);
+    sendJson(res, 200, await dealNextHand());
+  }));
+
+  route(ACTION_ROUTE, serialized(async (req, res) => {
     const body = await readBody(req);
     const kind = String(body.kind ?? '');
     const amount = Number.isFinite(body.amount) ? Number(body.amount) : 0;
     if (table.phase === 'over') {
-      table.startHand();
-      await runAiUntilHuman();
-      sendJson(res, 200, withState());
+      sendJson(res, 200, await dealNextHand());
       return;
     }
     if (table.phase !== 'betting' || table.toAct !== 0) {
@@ -195,6 +394,12 @@ export function apply(ctx, rawConfig) {
     table.act(0, kind, amount);
     await runAiUntilHuman();
     sendJson(res, 200, withState());
+  }));
+
+  route(HISTORY_ROUTE, async (req, res) => {
+    await storageReady;
+    collectHand();
+    sendJson(res, 200, historyPayload());
   });
 
   route(ADVICE_ROUTE, async (req, res) => {
@@ -274,7 +479,7 @@ function cardName(card) {
 function heuristicAdvice(table, snapshot) {
   const legal = snapshot.legal;
   const callCost = legal.callCost ?? 0;
-  const equity = snapshot.equity ? snapshot.equity.win + snapshot.equity.tie / 2 : 0;
+  const equity = snapshot.equity ? snapshot.equity.win + snapshot.equity.tie : 0;
   const potOdds = callCost > 0 ? callCost / (table.pot + callCost) : 0;
   const pct = (v) => `${Math.round(v * 100)}%`;
 

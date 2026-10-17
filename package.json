@@ -1,8 +1,8 @@
 {
   "name": "dsh-texas-poker",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
-  "description": "A playable no-limit Texas Hold'em table with an AI coach, rendered as a DeepSeek Harness panel.",
+  "description": "A playable six-handed no-limit Texas Hold'em table with AI opponents, a coach, session hand history and a profit curve, rendered as a DeepSeek Harness panel.",
   "license": "MIT",
   "author": "garyleelty",
   "repository": {
@@ -29,12 +29,16 @@
   "engines": {
     "node": ">=20"
   },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "check": "node --check index.js && node --check client.js && node --check lib/table.js && node --check lib/hand.js && node --check lib/ai.js && node --check lib/odds.js && npm test"
+  },
   "publishConfig": {
     "access": "public"
   },
   "meta": {
     "title": "德州扑克",
-    "description": "在 Harness 里玩无限注德州扑克，AI 对手陪桌，并可向 AI 教练要一手牌的建议。"
+    "description": "在 Harness 里玩 6 人桌无限注德州扑克，5 个 AI 对手陪桌，可向 AI 教练要建议，并查看会话手牌历史与累计盈亏曲线。"
   },
   "icon": "./icon.svg",
   "exports": {
@@ -48,7 +52,8 @@
     "lib/*.js",
     "cordis.patch.yml",
     "icon.svg",
-    "docs"
+    "docs",
+    "CHANGELOG.md"
   ],
   "dsh": {
     "manifestVersion": 1,

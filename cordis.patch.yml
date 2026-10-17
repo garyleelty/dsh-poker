@@ -5,7 +5,7 @@
         stack: 1000
         smallBlind: 5
         bigBlind: 10
-        opponents: 3
+        opponents: 5
         equityTrials: 400
         adviceMaxTokens: 400
         # Opponent "thinking" time: a multiplier on the built-in bands
