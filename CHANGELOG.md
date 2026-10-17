@@ -43,6 +43,12 @@
 - **`serialized` 包装器丢失 `req`/`res`**：`/poker/new-hand` 与 `/poker/action` 在生产环境返回 500（`Cannot set properties of undefined`），整个对局无法继续。新增的 `test/host.test.js` 正是抓到这个问题的地方。
 - **历史编号跳号**：安全水位会被持久化，列表从 `#1000001` 开始编号；改为加载前用临时负 id 占位、加载后重编号。
 
+### 弃牌后的状态一致性
+
+- **胜率**：hero 弃牌后 `humanEquity` 仍返回实时胜率（实测 50.5%），客户端会在已不可能赢时显示这个数字；现在弃牌返回 `null`，界面显示 `—`。
+- **教练建议**：弃牌但这一手仍在进行时，规则引擎会给出「胜率 0% 偏低，建议过牌」这类自相矛盾的建议；现在先判断弃牌并返回「这一手交给对手打完」。
+- **教练摘要**：`describeForCoach` / `heuristicAdvice` 读的是 `snapshot.legal`（当前行动者，常常是 AI），会把 AI 的「跟注 20」当成 hero 的选项发给模型；两处统一改用 `heroLegal`。
+
 ### 无障碍
 
 - 历史抽屉打开时移入焦点，Tab/Shift+Tab 在面板内循环，关闭时还原焦点。
