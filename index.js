@@ -466,7 +466,9 @@ function describeForCoach(table, snapshot, config) {
   const human = table.seats[0];
   const board = table.board.length;
   const streetName = { preflop: '翻牌前', flop: '翻牌', turn: '转牌', river: '河牌' }[table.street];
-  const legal = snapshot.legal;
+  // The hero's own options. `snapshot.legal` belongs to whoever acts now
+  // (often an AI), which told the model to advise a call the hero cannot make.
+  const legal = snapshot.heroLegal ?? snapshot.legal;
   const callCost = legal.callCost ?? 0;
   const pct = (v) => `${Math.round(v * 100)}%`;
 
@@ -498,7 +500,7 @@ function cardName(card) {
 
 /** Rule-based advice, used when no model is reachable. */
 function heuristicAdvice(table, snapshot) {
-  const legal = snapshot.legal;
+  const legal = snapshot.heroLegal ?? snapshot.legal;
   const callCost = legal.callCost ?? 0;
   const equity = snapshot.equity ? snapshot.equity.win + snapshot.equity.tie : 0;
   const potOdds = callCost > 0 ? callCost / (table.pot + callCost) : 0;

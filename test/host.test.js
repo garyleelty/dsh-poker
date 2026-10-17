@@ -195,6 +195,27 @@ test('history ids stay small and contiguous across a reload', async () => {
   assert.ok(seeded.global.nextId <= 3, `nextId should continue from 2, got ${seeded.global.nextId}`);
 });
 
+test('the coach summary describes the hero, not the acting AI', async () => {
+  const { ctx, routes } = fakeContext();
+  apply(ctx, { opponents: 4, thinkPace: 0 });
+  await settle();
+
+  // Fold the hero so the acting seat is an AI while the hand continues.
+  const state = (await callRoute(routes, '/poker/state')).body;
+  if (state.toAct !== 0) return; // this seed put an AI first; nothing to assert
+  await callRoute(routes, '/poker/action', { kind: 'fold', amount: 0 });
+
+  const after = (await callRoute(routes, '/poker/state')).body;
+  if (after.phase !== 'betting') return; // everyone folded to the hero
+
+  const advice = (await callRoute(routes, '/poker/advice', {})).body;
+  // A folded hero has no options, so the summary must not advertise a call.
+  assert.ok(
+    advice.advice.includes('弃牌') && !advice.advice.includes('建议跟注'),
+    `folded hero must not be told to call, got: ${advice.advice}`,
+  );
+});
+
 test('advice route falls back to the rules engine without a model', async () => {
   const { ctx, routes } = fakeContext();
   apply(ctx, { opponents: 2, thinkPace: 0 });
