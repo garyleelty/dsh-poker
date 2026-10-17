@@ -2011,14 +2011,28 @@ window.__ModuleLoader__.load({
         return response.json();
       }, []);
 
+      // A poll can resolve after an action's response and overwrite newer
+      // state with an older snapshot. Requests take a ticket when they START;
+      // a response only lands if no newer request has started since.
+      const stateTicket = React.useRef(0);
+      const beginRequest = React.useCallback(() => {
+        stateTicket.current += 1;
+        return stateTicket.current;
+      }, []);
+      const applyState = React.useCallback((ticket, next) => {
+        if (ticket !== stateTicket.current) return; // a newer request is in flight
+        setState(next);
+      }, []);
+
       const refresh = React.useCallback(async () => {
+        const ticket = beginRequest();
         try {
-          setState(await call('/poker/state'));
+          applyState(ticket, await call('/poker/state'));
           setLoadFailed(false);
         } catch {
           setLoadFailed(true);
         }
-      }, [call]);
+      }, [call, applyState, beginRequest]);
 
       React.useEffect(() => {
         void refresh();
@@ -2029,10 +2043,13 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         if (!state || state.phase === 'over') return undefined;
         const timer = setInterval(() => {
-          call('/poker/state').then(setState).catch(() => {});
+          const ticket = beginRequest();
+          call('/poker/state')
+            .then((next) => applyState(ticket, next))
+            .catch(() => {});
         }, 1200);
         return () => clearInterval(timer);
-      }, [state?.phase, state?.handNumber, call]);
+      }, [state?.phase, state?.handNumber, call, applyState, beginRequest]);
 
       const loadHistory = React.useCallback(async () => {
         setHistoryLoading(true);
@@ -2065,34 +2082,40 @@ window.__ModuleLoader__.load({
        * street landing at once.
        */
       const withFollow = React.useCallback(async (path, body) => {
+        // The action's own response is the newest truth: take a ticket now so
+        // the follow-polls (and the background poller) cannot overwrite it.
         let polling = true;
         const follow = (async () => {
           while (polling) {
             await new Promise((r) => setTimeout(r, 260));
             if (!polling) break;
             try {
-              setState(await call('/poker/state'));
+              const ticket = beginRequest();
+              applyState(ticket, await call('/poker/state'));
             } catch {
               /* keep the last good state */
             }
           }
         })();
+        const ticket = beginRequest();
         try {
-          return await call(path, body);
+          const result = await call(path, body);
+          applyState(ticket, result);
+          return result;
         } finally {
           polling = false;
           await follow;
         }
-      }, [call]);
+      }, [call, applyState, beginRequest]);
 
       const onAction = React.useCallback(async (action) => {
         setBusy(true);
         setAdvice(null);
         try {
-          setState(await withFollow('/poker/action', {
+          await withFollow('/poker/action', {
             kind: action.kind,
             amount: action.amount ?? 0,
-          }));
+          });
         } finally {
           setBusy(false);
         }
@@ -2102,7 +2125,7 @@ window.__ModuleLoader__.load({
         setBusy(true);
         setAdvice(null);
         try {
-          setState(await withFollow('/poker/new-hand', {}));
+          await withFollow('/poker/new-hand', {});
         } finally {
           setBusy(false);
         }
