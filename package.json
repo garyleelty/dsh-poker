@@ -30,7 +30,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test \"test/*.test.js\"",
+    "test": "node --test",
     "check": "node --check index.js && node --check client.js && node --check lib/table.js && node --check lib/hand.js && node --check lib/ai.js && node --check lib/odds.js && npm test"
   },
   "publishConfig": {
