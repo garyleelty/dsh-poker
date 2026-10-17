@@ -2114,9 +2114,18 @@ window.__ModuleLoader__.load({
         }
       }, [call, applyState, beginRequest]);
 
+      // Advice is bound to the hand it was asked for. If the player acts or
+      // deals a new hand while the model is still answering, the late reply
+      // must not appear as advice for the new situation.
+      const adviceTicket = React.useRef(0);
+      const clearAdvice = React.useCallback(() => {
+        adviceTicket.current += 1;
+        setAdvice(null);
+      }, []);
+
       const onAction = React.useCallback(async (action) => {
         setBusy(true);
-        setAdvice(null);
+        clearAdvice();
         try {
           await withFollow('/poker/action', {
             kind: action.kind,
@@ -2125,26 +2134,29 @@ window.__ModuleLoader__.load({
         } finally {
           setBusy(false);
         }
-      }, [withFollow]);
+      }, [withFollow, clearAdvice]);
 
       const onNext = React.useCallback(async () => {
         setBusy(true);
-        setAdvice(null);
+        clearAdvice();
         try {
           await withFollow('/poker/new-hand', {});
         } finally {
           setBusy(false);
         }
-      }, [withFollow]);
+      }, [withFollow, clearAdvice]);
 
       const onAdvice = React.useCallback(async () => {
+        adviceTicket.current += 1;
+        const ticket = adviceTicket.current;
         setAsking(true);
         try {
-          setAdvice(await call('/poker/advice', {}));
+          const next = await call('/poker/advice', {});
+          if (ticket === adviceTicket.current) setAdvice(next);
         } catch {
-          setAdvice({ advice: '', source: 'error' });
+          if (ticket === adviceTicket.current) setAdvice({ advice: '', source: 'error' });
         } finally {
-          setAsking(false);
+          if (ticket === adviceTicket.current) setAsking(false);
         }
       }, [call]);
 
