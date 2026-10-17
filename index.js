@@ -367,8 +367,10 @@ export function apply(ctx, rawConfig) {
    * parallel, the second request simply observes the first hand's result.
    */
   let tableChain = Promise.resolve();
-  const serialized = (handler) => () => {
-    const run = tableChain.then(handler);
+  const serialized = (handler) => (req, res) => {
+    // Forward the request objects: dropping them made the handler receive
+    // `undefined` for `res` and throw on every call.
+    const run = tableChain.then(() => handler(req, res));
     // Keep the chain alive even when a handler fails.
     tableChain = run.catch(() => {});
     return run;
