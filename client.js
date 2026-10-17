@@ -32,6 +32,7 @@ window.__ModuleLoader__.load({
       --pk-green:#4bb07a;
     }
     .pk-root{width:100%;min-width:0;display:flex;flex-direction:column;gap:10px}
+    .pk-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 
     /* Top bar */
     .pk-topbar{display:flex;align-items:center;gap:10px;min-width:0;height:28px;overflow:hidden}
@@ -387,6 +388,8 @@ window.__ModuleLoader__.load({
       box-shadow:-24px 0 60px -34px rgba(0,0,0,.9);display:flex;flex-direction:column;
       overflow:hidden;animation:pk-slide .22s cubic-bezier(.2,.7,.3,1);
     }
+    .pk-drawer:focus{outline:none}
+    .pk-drawer:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}
     .pk-drawer__head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:15px 15px 9px}
     .pk-drawer__title{font-size:17px;font-weight:600;color:var(--dsw-alias-label-primary);line-height:22px}
     .pk-drawer__sub{font-size:10.5px;color:var(--dsw-alias-label-secondary);margin-top:2px}
@@ -641,6 +644,9 @@ window.__ModuleLoader__.load({
         'ai.thought.probe': '试探性下注',
         'ai.thought.check': '胜率 {equity}，先看牌',
         'seat.you': '你',
+        'a11y.yourTurn': '轮到你了',
+        'a11y.handWon': '这一手你赢了',
+        'a11y.handOver': '这一手结束',
         'seat.name.aimee': '小艾',
         'seat.name.oldk': '老K',
         'seat.name.amon': '阿蒙',
@@ -769,6 +775,9 @@ window.__ModuleLoader__.load({
         'ai.thought.probe': 'Probe bet',
         'ai.thought.check': 'Equity {equity}, taking a free look',
         'seat.you': 'You',
+        'a11y.yourTurn': 'Your turn',
+        'a11y.handWon': 'You won this hand',
+        'a11y.handOver': 'Hand complete',
         'seat.name.aimee': 'Aimee',
         'seat.name.oldk': 'Old K',
         'seat.name.amon': 'Amon',
@@ -1574,9 +1583,22 @@ window.__ModuleLoader__.load({
       const endKind = state.result?.kind ?? null;
       const ended = isOver && (endKind === 'bust' || endKind === 'sweep');
 
+      // Announced to assistive tech: whose turn it is, and how the hand ended.
+      const announcement = isOver
+        ? (ended
+          ? (endKind === 'sweep' ? t('end.sweep') : t('end.bust'))
+          : (iWon ? t('a11y.handWon') : t('a11y.handOver')))
+        : (myTurn ? t('a11y.yourTurn') : '');
+
       return h(
         'div',
         { className: 'pk-root' },
+        h('div', {
+          className: 'pk-sr-only',
+          role: 'status',
+          'aria-live': 'polite',
+          'aria-atomic': 'true',
+        }, announcement),
         h(
           'div',
           { className: 'pk-topbar' },
@@ -1849,16 +1871,52 @@ window.__ModuleLoader__.load({
 
     function HistoryDrawer({ open, data, loading, error, onClose, onRefresh, t }) {
       const [expanded, setExpanded] = React.useState(null);
+      const panelRef = React.useRef(null);
+      const restoreRef = React.useRef(null);
       React.useEffect(() => {
         if (open) setExpanded(null);
       }, [open]);
+      // Focus management: a modal drawer must take focus on open, keep Tab
+      // inside itself, and hand focus back to whatever opened it.
       React.useEffect(() => {
         if (!open) return undefined;
+        restoreRef.current = typeof document !== 'undefined' ? document.activeElement : null;
+        const panel = panelRef.current;
+        const focusables = () => {
+          if (!panel) return [];
+          return Array.from(panel.querySelectorAll(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+          )).filter((node) => !node.disabled && node.offsetParent !== null);
+        };
+        const first = focusables()[0];
+        if (first) first.focus();
+        else if (panel) panel.focus();
+
         const onKey = (e) => {
-          if (e.key === 'Escape') onClose();
+          if (e.key === 'Escape') {
+            e.stopPropagation();
+            onClose();
+            return;
+          }
+          if (e.key !== 'Tab') return;
+          const items = focusables();
+          if (items.length === 0) return;
+          const firstItem = items[0];
+          const lastItem = items[items.length - 1];
+          if (e.shiftKey && document.activeElement === firstItem) {
+            e.preventDefault();
+            lastItem.focus();
+          } else if (!e.shiftKey && document.activeElement === lastItem) {
+            e.preventDefault();
+            firstItem.focus();
+          }
         };
         window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
+        return () => {
+          window.removeEventListener('keydown', onKey);
+          const restore = restoreRef.current;
+          if (restore && typeof restore.focus === 'function') restore.focus();
+        };
       }, [open, onClose]);
 
       if (!open) return null;
@@ -1877,6 +1935,8 @@ window.__ModuleLoader__.load({
             role: 'dialog',
             'aria-modal': true,
             'aria-label': t('history.title'),
+            tabIndex: -1,
+            ref: panelRef,
             onClick: (e) => e.stopPropagation(),
           },
           h(
