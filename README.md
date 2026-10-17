@@ -135,13 +135,14 @@ npm run check   # 语法检查 + 单元测试（node:test）
 npm test        # 只跑测试
 ```
 
-测试分三层：
+测试分四层：
 
 - `test/table.test.js` — 规则核心：牌型比较（2 万手随机对暴力枚举）、边池、盲注与行动顺序、加注语义、筹码守恒。
-- `test/host.test.js` — Host 路由：用假 cordis context 跑通五个路由，覆盖 `heroLegal`、409 守卫、请求串行化、新手退筹码、历史编号、教练兜底、配置 clamp。
+- `test/host.test.js` — Host 路由：用假 cordis context 跑通五个路由，覆盖 `heroLegal`、409 守卫、请求串行化、新手退筹码、历史编号与 200 手上限、教练兜底、配置 clamp、畸形请求体。
 - `test/soak.test.js` — 长跑不变量：1–5 个对手各跑数十手，逐动作校验筹码守恒、手牌能结束、AI 动作合法。
+- `test/client.test.js` — 客户端渲染：在 vm 沙箱里用最小 React shim 真正调用面板组件，能抓到「`const` 先用后声明」这类只在渲染时爆的 bug，并校验中英词典键完全一致。
 
-`lib/` 是纯函数，可以直接在 Node 里跑；改动状态机后 `npm test` 会自动跑上面三层用例。
+`lib/` 是纯函数，可以直接在 Node 里跑；`npm test` 会自动跑上面四层用例。
 
 客户端改动刷新页面即可生效；Host（`index.js`、`lib/`）改动需要重启 Harness。
 
