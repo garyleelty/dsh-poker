@@ -334,6 +334,46 @@ test('human minimum raise raises to the shown amount, exactly once', () => {
   assert.ok(raise.min - before >= t.minRaise || raise.min === t.seats[0].streetCommitted + t.seats[0].stack, 'the raise is at least a min-raise (or all-in)');
 });
 
+test('an incomplete all-in does not raise the minimum re-raise', () => {
+  const t = freshTable(2, 15);
+  t.startHand();
+  let guard = 0;
+  while (t.phase === 'betting' && t.toAct !== 0 && guard < 10) {
+    guard += 1;
+    t.act(t.toAct, 'call');
+  }
+  t.act(0, 'raise', 100); // full raise to 100, minRaise becomes 90
+  assert.equal(t.currentBet, 100);
+
+  // A short stack shoves to 130: only a 30 raise, not a full re-raise.
+  const short = t.seats.find((s) => s.id !== 0 && !s.folded && s.id !== t.dealer);
+  short.stack = 130 - short.streetCommitted;
+  t.act(short.id, 'allin');
+  assert.equal(t.currentBet, 130, 'the all-in still raises what everyone must call');
+
+  // The next raise-to must be measured from the last FULL level (100), not
+  // from the incomplete shove: 100 + 90 = 190, never 130 + 90 = 220.
+  const raise = t.legalActions(t.toAct).actions.find((a) => a.kind === 'raise');
+  assert.equal(raise.min, 190, 're-raise floor comes from the last full raise');
+  t.act(t.toAct, 'raise', raise.min);
+  assert.equal(t.currentBet, 190);
+});
+
+test('raise max reaches all-in even when the actor already posted chips', () => {
+  const t = freshTable(2, 16);
+  t.startHand();
+  const sb = t.seats.find((s) => s.streetCommitted === 5);
+  let guard = 0;
+  while (t.phase === 'betting' && t.toAct !== sb.id && guard < 10) {
+    guard += 1;
+    t.act(t.toAct, 'call');
+  }
+  const raise = t.legalActions(sb.id).actions.find((a) => a.kind === 'raise');
+  assert.equal(raise.max, sb.streetCommitted + sb.stack, 'max is the street total of an all-in');
+  t.act(sb.id, 'raise', raise.max);
+  assert.equal(t.seats[sb.id].stack, 0, 'raise to max puts the seat all-in');
+});
+
 test('calling a short all-in never pays more than the stack', () => {
   const t = freshTable(2, 12);
   for (const seat of t.seats) seat.stack = 1000;
@@ -342,8 +382,7 @@ test('calling a short all-in never pays more than the stack', () => {
   const before = t.seats.map((s) => s.stack);
   // Whoever acts first among non-all-in seats: calling must never add chips.
   const actor = t.toAct;
-  t.act(actor, 'call');
-  assert.ok(t.seats[actor].stack <= before[actor], 'a call can never increase a stack');
+  t.act(actor, 'call');  assert.ok(t.seats[actor].stack <= before[actor], 'a call can never increase a stack');
 });
 
 // ---------------------------------------------------------------------------
