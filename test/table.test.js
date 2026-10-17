@@ -374,6 +374,16 @@ test('raise max reaches all-in even when the actor already posted chips', () => 
   assert.equal(t.seats[sb.id].stack, 0, 'raise to max puts the seat all-in');
 });
 
+test('a folded hero reports no equity', () => {
+  const t = freshTable(2, 17);
+  t.startHand();
+  // Hero folds pre-flop; the other seats keep playing.
+  t.act(0, 'fold');
+  assert.equal(t.seats[0].folded, true);
+  assert.equal(t.phase, 'betting', 'the hand continues for the other seats');
+  assert.equal(t.humanEquity(200), null, 'a folded hero cannot win, so equity is null');
+});
+
 test('calling a short all-in never pays more than the stack', () => {
   const t = freshTable(2, 12);
   for (const seat of t.seats) seat.stack = 1000;
