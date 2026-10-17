@@ -241,6 +241,42 @@ test('primitive and malformed request bodies never crash a route', async () => {
   }
 });
 
+test('the archive caps at 200 hands and evicts the oldest', async () => {
+  const seeded = {
+    global: {
+      version: 1,
+      nextId: 200,
+      hands: Array.from({ length: 200 }, (_, i) => ({
+        uid: `seed-${i}`, at: i + 1, id: i + 1,
+        hero: { net: 1, stack: 1000, cards: [], hand: null, folded: false },
+        pot: 10, handNumber: i + 1, board: [], winners: [], shown: [], opponents: [], actions: [],
+      })),
+    },
+  };
+  const { ctx, routes } = fakeContext({ storage: seeded });
+  apply(ctx, { opponents: 1, thinkPace: 0 });
+  await new Promise((r) => { setTimeout(r, 60); });
+
+  const loaded = (await callRoute(routes, '/poker/history')).body;
+  assert.equal(loaded.hands.length, 200);
+  assert.equal(loaded.hands[0].id, 1);
+
+  // Settle one more hand by folding it away.
+  for (let i = 0; i < 30; i += 1) {
+    const state = (await callRoute(routes, '/poker/state')).body;
+    if (state.phase === 'over') break;
+    if (state.toAct === 0) {
+      await callRoute(routes, '/poker/action', { kind: 'fold', amount: 0 });
+    }
+  }
+  await new Promise((r) => { setTimeout(r, 60); });
+
+  const after = (await callRoute(routes, '/poker/history')).body;
+  assert.equal(after.hands.length, 200, 'the cap holds');
+  assert.equal(after.hands[0].id, 2, 'the oldest hand was evicted');
+  assert.equal(after.hands[after.hands.length - 1].id, 201, 'the new hand continues the sequence');
+});
+
 test('advice route falls back to the rules engine without a model', async () => {
   const { ctx, routes } = fakeContext();
   apply(ctx, { opponents: 2, thinkPace: 0 });
