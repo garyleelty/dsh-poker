@@ -216,6 +216,31 @@ test('the coach summary describes the hero, not the acting AI', async () => {
   );
 });
 
+test('primitive and malformed request bodies never crash a route', async () => {
+  const { ctx, routes } = fakeContext();
+  apply(ctx, { opponents: 2, thinkPace: 0 });
+  await settle();
+
+  // JSON.parse returns a primitive for these, so a naive `body.kind` read
+  // used to throw and surface as a 500.
+  for (const raw of ['null', '42', '"x"', '[]', 'true', '{"kind":']) {
+    let status = 200;
+    let payload = null;
+    const res = {
+      set statusCode(v) { status = v; },
+      get statusCode() { return status; },
+      setHeader: () => {},
+      end: (text) => { payload = text; },
+    };
+    const req = {
+      async *[Symbol.asyncIterator]() { yield Buffer.from(raw); },
+    };
+    await routes.get('/poker/action')(req, res);
+    assert.equal(status, 200, `body ${raw} must not 500`);
+    assert.ok(payload, 'a JSON response is still written');
+  }
+});
+
 test('advice route falls back to the rules engine without a model', async () => {
   const { ctx, routes } = fakeContext();
   apply(ctx, { opponents: 2, thinkPace: 0 });

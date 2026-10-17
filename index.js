@@ -258,7 +258,11 @@ export function apply(ctx, rawConfig) {
     }
     if (chunks.length === 0) return {};
     try {
-      return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      // JSON.parse('null' | '3' | '"x"') returns a primitive; callers read
+      // properties off the body, so normalize anything that is not a plain
+      // object to an empty one.
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
     } catch {
       return {};
     }
