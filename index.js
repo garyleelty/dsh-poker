@@ -88,10 +88,11 @@ export function apply(ctx, rawConfig) {
   const HISTORY_LIMIT = 200;
   let archive = [];
   const archived = new Set();
-  // IDs start above any plausible stored count so a hand settled while the
-  // archive is still loading can never collide with a stored id; the loader
-  // re-bases `nextId` onto the real maximum once the unit is open.
-  let nextId = 1_000_000;
+  // Hands settled before the archive finishes loading get temporary negative
+  // ids, which can never collide with stored ones. The loader renumbers them
+  // into the real sequence once the unit is open.
+  let nextId = 0;
+  let archiveLoaded = false;
   let rebuyPending = false;
   let storageUnit = null;
   let storageReady = Promise.resolve();
@@ -101,6 +102,9 @@ export function apply(ctx, rawConfig) {
     saveChain = saveChain.then(async () => {
       await storageReady;
       if (!storageUnit) return;
+      // Never persist the loading-window state: temporary negative ids would
+      // survive a restart and scramble the list order.
+      if (!archiveLoaded) return;
       await storageUnit.setGlobal({
         version: HISTORY_VERSION,
         nextId,
@@ -169,12 +173,17 @@ export function apply(ctx, rawConfig) {
         .slice(-HISTORY_LIMIT);
       let maxId = Number(global?.nextId) || 0;
       for (const hand of archive) {
-        if (!Number.isSafeInteger(hand.id)) hand.id = maxId + 1;
-        maxId = Math.max(maxId, hand.id);
+        if (Number.isSafeInteger(hand.id) && hand.id > 0) maxId = Math.max(maxId, hand.id);
       }
-      // Hands archived while loading sit above the safe-watermark start, so
-      // the rebase must never move `nextId` backwards.
-      nextId = Math.max(maxId, nextId);
+      // Renumber every hand that is not part of the stored sequence (temporary
+      // negative ids from the loading window) so the list stays contiguous and
+      // starts at 1 on a fresh install.
+      for (const hand of archive) {
+        if (!Number.isSafeInteger(hand.id) || hand.id <= 0) hand.id = ++maxId;
+      }
+      archive.sort((a, b) => a.id - b.id);
+      nextId = maxId;
+      archiveLoaded = true;
       saveArchive();
     } catch (error) {
       ctx.logger?.warn?.(`poker: history storage unavailable: ${String(error?.message ?? error)}`);
@@ -189,7 +198,9 @@ export function apply(ctx, rawConfig) {
     const record = table.lastHand;
     if (!record || archived.has(record.uid)) return;
     archived.add(record.uid);
-    archive.push({ ...record, id: ++nextId, rebuy: rebuyPending });
+    // A negative temporary id marks "settled before the archive loaded"; the
+    // loader assigns the real number in stored order.
+    archive.push({ ...record, id: archiveLoaded ? ++nextId : -1, rebuy: rebuyPending });
     rebuyPending = false;
     if (archive.length > HISTORY_LIMIT) {
       const dropped = archive.splice(0, archive.length - HISTORY_LIMIT);
