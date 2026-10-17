@@ -2051,15 +2051,21 @@ window.__ModuleLoader__.load({
         return () => clearInterval(timer);
       }, [state?.phase, state?.handNumber, call, applyState, beginRequest]);
 
+      // Same ticket rule as the table state: an auto-refresh fired when a hand
+      // settles can race a manual refresh, and the older payload must not win.
+      const historyTicket = React.useRef(0);
       const loadHistory = React.useCallback(async () => {
+        historyTicket.current += 1;
+        const ticket = historyTicket.current;
         setHistoryLoading(true);
         setHistoryFailed(false);
         try {
-          setHistoryData(await call('/poker/history'));
+          const next = await call('/poker/history');
+          if (ticket === historyTicket.current) setHistoryData(next);
         } catch {
-          setHistoryFailed(true);
+          if (ticket === historyTicket.current) setHistoryFailed(true);
         } finally {
-          setHistoryLoading(false);
+          if (ticket === historyTicket.current) setHistoryLoading(false);
         }
       }, [call]);
 
