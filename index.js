@@ -305,7 +305,15 @@ export function apply(ctx, rawConfig) {
       const before = progressKey();
       table.act(id, choice.kind, choice.amount ?? 0);
       const last = table.history[table.history.length - 1];
-      if (last) last.thought = choice.thought;
+      if (last) {
+        last.thought = choice.thought;
+        // Structured form so the client can render the bubble in its own
+        // locale instead of showing the Host's Chinese text.
+        if (choice.thoughtKey) {
+          last.thoughtKey = choice.thoughtKey;
+          last.thoughtArgs = choice.thoughtArgs ?? null;
+        }
+      }
       if (table.phase === 'betting' && progressKey() === before) break;
     }
   };

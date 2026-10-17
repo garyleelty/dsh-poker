@@ -623,6 +623,23 @@ window.__ModuleLoader__.load({
         'hand.full-house': '葫芦',
         'hand.quads': '四条',
         'hand.straight-flush': '同花顺',
+        'style.tight': '紧凶',
+        'style.tight.hint': '入池少，加注果断',
+        'style.loose': '松凶',
+        'style.loose.hint': '入池宽，爱施压',
+        'style.rock': '石头',
+        'style.rock.hint': '只打强牌，很少诈唬',
+        'style.maniac': '疯狗',
+        'style.maniac.hint': '什么牌都敢打，诈唬多',
+        'ai.thought.valueRaise': '胜率 {equity} 远高于底池赔率，加注',
+        'ai.thought.callAllIn': '赔率合适，跟注全下 {amount}',
+        'ai.thought.call': '胜率 {equity}，底池赔率 {odds}，跟注',
+        'ai.thought.foldWeak': '胜率 {equity} 不足，弃牌',
+        'ai.thought.foldOdds': '胜率 {equity}，不划算，弃牌',
+        'ai.thought.valueBet': '胜率 {equity}，主动出击',
+        'ai.thought.probe': '试探性下注',
+        'ai.thought.check': '胜率 {equity}，先看牌',
+        'seat.you': '你',
       },
       en: {
         panel: 'Texas Hold’em',
@@ -728,6 +745,23 @@ window.__ModuleLoader__.load({
         'hand.full-house': 'Full house',
         'hand.quads': 'Four of a kind',
         'hand.straight-flush': 'Straight flush',
+        'style.tight': 'Tight',
+        'style.tight.hint': 'Plays few hands, raises decisively',
+        'style.loose': 'Loose',
+        'style.loose.hint': 'Wide range, loves pressure',
+        'style.rock': 'Rock',
+        'style.rock.hint': 'Only strong hands, rarely bluffs',
+        'style.maniac': 'Maniac',
+        'style.maniac.hint': 'Plays anything, bluffs a lot',
+        'ai.thought.valueRaise': 'Equity {equity} well above pot odds, raising',
+        'ai.thought.callAllIn': 'Fair price, calling the all-in {amount}',
+        'ai.thought.call': 'Equity {equity} vs pot odds {odds}, calling',
+        'ai.thought.foldWeak': 'Equity {equity} is too low, folding',
+        'ai.thought.foldOdds': 'Equity {equity} does not pay, folding',
+        'ai.thought.valueBet': 'Equity {equity}, taking the initiative',
+        'ai.thought.probe': 'Probe bet',
+        'ai.thought.check': 'Equity {equity}, taking a free look',
+        'seat.you': 'You',
       },
     };
 
@@ -762,6 +796,34 @@ window.__ModuleLoader__.load({
     function styleForSeat(seat) {
       if (seat.style) return seat.style;
       return FALLBACK_STYLES[Math.max(0, (seat.id - 1) % FALLBACK_STYLES.length)];
+    }
+
+    /** Localized personality tag, falling back to the Host's Chinese label. */
+    function styleLabel(t, style) {
+      if (!style) return '';
+      const key = `style.${style.key}`;
+      const text = t(key);
+      return text === key ? (style.label ?? '') : text;
+    }
+
+    /** Localized personality tooltip. */
+    function styleHint(t, style) {
+      if (!style) return '';
+      const key = `style.${style.key}.hint`;
+      const text = t(key);
+      return text === key ? (style.hint ?? '') : text;
+    }
+
+    /**
+     * Localized AI reasoning. The Host sends both the Chinese `thought` and a
+     * structured `thoughtKey`; prefer the key so English UI stays English.
+     */
+    function thoughtText(t, entry) {
+      if (entry?.thoughtKey) {
+        const text = t(entry.thoughtKey, entry.thoughtArgs ?? {});
+        if (text !== entry.thoughtKey) return text;
+      }
+      return entry?.thought ?? '';
     }
 
     /** Server sends category keys; the dictionary owns the wording. */
@@ -974,14 +1036,14 @@ window.__ModuleLoader__.load({
             style: avatarColor ? { '--av': avatarColor } : undefined,
             title: style?.hint ?? undefined,
             'aria-hidden': true,
-          }, isHero ? '你' : (seat.name?.[0] ?? '?')),
+          }, isHero ? t('seat.you') : (seat.name?.[0] ?? '?')),
           h('span', { className: 'pk-seat__name' }, seat.name),
           style
             ? h('span', {
               className: 'pk-seat__style',
               style: { '--av': style.color },
-              title: style.hint,
-            }, style.label)
+              title: styleHint(t, style),
+            }, styleLabel(t, style))
             : null,
           tag === 'allin' ? h('span', { className: 'pk-seat__tag pk-seat__tag--allin' }, 'ALL-IN') : null,
           tag === 'out' ? h('span', { className: 'pk-seat__tag pk-seat__tag--out' }, 'OUT') : null,
@@ -1042,10 +1104,10 @@ window.__ModuleLoader__.load({
           setBubble(null);
           return undefined;
         }
-        setBubble({ seat: lastEntry.seat, text: lastEntry.thought });
+        setBubble({ seat: lastEntry.seat, text: thoughtText(t, lastEntry) });
         const timer = setTimeout(() => setBubble(null), 2800);
         return () => clearTimeout(timer);
-      }, [over, lastEntry?.seat, lastEntry?.thought, history.length]);
+      }, [over, lastEntry?.seat, lastEntry?.thought, lastEntry?.thoughtKey, history.length, t]);
 
       const winnerList = state.result?.winners ?? [];
       const winners = new Set(winnerList.map((w) => w.name));
@@ -1245,7 +1307,7 @@ window.__ModuleLoader__.load({
               }),
               h('span', { key: 't' }, entry.text ?? ''),
               entry.thought
-                ? h('span', { key: 'w', className: 'pk-history__thought' }, `（${entry.thought}）`)
+                ? h('span', { key: 'w', className: 'pk-history__thought' }, `（${thoughtText(t, entry)}）`)
                 : null,
             ]
             : null,
