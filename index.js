@@ -507,6 +507,11 @@ function heuristicAdvice(table, snapshot) {
   if (table.phase === 'over') {
     return { text: '本局已结束，点击「下一手」开始新的一手牌。' };
   }
+  // A folded hero has no decision: any "call/raise/fold" advice would be
+  // nonsense (and equity is null, so the numbers below would read 0%).
+  if (table.seats[0].folded) {
+    return { text: '你已经弃牌，这一手交给对手打完；等结果出来后点「下一手」继续。' };
+  }
   if (callCost === 0) {
     if (equity > 0.6) return { text: `胜率 ${pct(equity)} 很强，建议下注或加注建立价值。` };
     if (equity > 0.4) return { text: `胜率 ${pct(equity)} 中等，可以小额下注试探，也可以过牌控制底池。` };
