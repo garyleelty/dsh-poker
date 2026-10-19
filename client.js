@@ -1823,18 +1823,21 @@ window.__ModuleLoader__.load({
                   (hand.actions ?? []).map((action, i) => h(
                     'span',
                     { key: i, className: 'pk-handrow__action' },
-                    action.text,
+                    // Rebuild the line from structured fields so the seat name
+                    // and the verb follow the UI language; the stored `text`
+                    // is the Host's Chinese rendering.
+                    `${seatName(t, action)} ${actionText(action, t)}`,
                   ))),
                 h('div', { className: 'pk-handrow__foot' },
                   `${t('pot')} ${hand.pot} · ` + (hand.winners ?? [])
-                    .map((w) => `${w.name} ${formatSigned(w.amount)}${w.hand ? ` · ${handLabel(t, w.hand)}` : ''}`)
+                    .map((w) => `${seatName(t, w)} ${formatSigned(w.amount)}${w.hand ? ` · ${handLabel(t, w.hand)}` : ''}`)
                     .join(' / ')),
                 h('div', { className: 'pk-handrow__foot' },
                   (hand.opponents ?? []).map((o) => {
                     const state = o.folded
                       ? t('action.fold')
                       : (o.hand ? handLabel(t, o.hand) : '—');
-                    return `${o.name} ${state} ${o.stack}`;
+                    return `${seatName(t, o)} ${state} ${o.stack}`;
                   }).join(' · ')),
               )
               : null,
