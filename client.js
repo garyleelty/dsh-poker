@@ -857,6 +857,16 @@ window.__ModuleLoader__.load({
       }).join(' ');
     }
 
+    /** Localized button label for a legal action, falling back to the Host's. */
+    function actionLabel(action, t) {
+      if (!action) return '';
+      if (action.labelKey) {
+        const text = t(action.labelKey, action.labelArgs ?? {});
+        if (text !== action.labelKey) return text;
+      }
+      return action.label ?? '';
+    }
+
     function actionText(action, t) {
       if (!action) return '';
       const amount = action.amount ?? 0;
@@ -1041,7 +1051,7 @@ window.__ModuleLoader__.load({
             style: avatarColor ? { '--av': avatarColor } : undefined,
             title: style?.hint ?? undefined,
             'aria-hidden': true,
-          }, isHero ? t('seat.you') : (seat.name?.[0] ?? '?')),
+          }, isHero ? t('seat.you') : (seatName(t, seat)?.[0] ?? '?')),
           h('span', { className: 'pk-seat__name' }, seatName(t, seat)),
           style
             ? h('span', {
@@ -1347,22 +1357,22 @@ window.__ModuleLoader__.load({
           byKind.fold
             ? h('button', {
               className: 'pk-btn pk-btn--danger', disabled: busy, onClick: () => onAction(byKind.fold),
-            }, byKind.fold.label)
+            }, actionLabel(byKind.fold, t))
             : null,
           byKind.check
             ? h('button', {
               className: 'pk-btn', disabled: busy, onClick: () => onAction(byKind.check),
-            }, byKind.check.label)
+            }, actionLabel(byKind.check, t))
             : null,
           byKind.call
             ? h('button', {
               className: 'pk-btn pk-btn--primary', disabled: busy, onClick: () => onAction(byKind.call),
-            }, byKind.call.label)
+            }, actionLabel(byKind.call, t))
             : null,
           byKind.allin
             ? h('button', {
               className: 'pk-btn', disabled: busy, onClick: () => onAction(byKind.allin),
-            }, byKind.allin.label)
+            }, actionLabel(byKind.allin, t))
             : null,
         ),
         raise
