@@ -538,35 +538,28 @@ function heuristicAdvice(table, snapshot) {
  * every other registered provider. A route without credentials fails at the
  * provider, so trying the next one keeps coaching available on any setup.
  */
+/**
+ * The single route to ask: the session's configured default model.
+ * Falling back to every registered provider meant asking a model the player
+ * never chose, and — because each attempt has its own timeout — could hold the
+ * request for N x 20s, which showed up as an /poker/advice hang.
+ */
 function candidateRoutes(ctx) {
-  const routes = [];
-  const seen = new Set();
-  const push = (provider, model) => {
-    if (typeof provider !== 'string' || provider.length === 0) return;
-    if (typeof model !== 'string' || model.length === 0) return;
-    const key = `${provider}\u0000${model}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    routes.push({ provider, model });
-  };
-
   const selection = ctx.agentDefaultModel?.currentSelection?.();
-  if (selection) push(selection.provider, selection.model);
-
-  let providers = [];
-  try {
-    providers = ctx.llm.listProviders?.() ?? [];
-  } catch {
-    providers = [];
+  if (typeof selection?.provider === 'string' && selection.provider.length > 0
+    && typeof selection?.model === 'string' && selection.model.length > 0) {
+    return [{ provider: selection.provider, model: selection.model }];
   }
-  for (const info of providers) push(info?.id ?? info?.provider, selection?.model);
-  return routes;
+  return [];
 }
 
 /**
  * One-shot model call. Streams chunks and assembles the text without importing
  * the LLM package, so the bundle carries no dependency on it.
  */
+/** Hard ceiling for the whole coach call, so the route can never hang. */
+const ADVICE_TIMEOUT_MS = 15000;
+
 async function askCoach(ctx, summary, config) {
   const routes = candidateRoutes(ctx);
   if (routes.length === 0) return null;
@@ -574,7 +567,7 @@ async function askCoach(ctx, summary, config) {
   let lastError = null;
   for (const route of routes) {
     try {
-      const text = await streamOnce(ctx, route, summary, config);
+      const text = await streamOnce(ctx, route, summary, config, ADVICE_TIMEOUT_MS);
       if (text) return text;
     } catch (error) {
       lastError = error;
@@ -585,13 +578,18 @@ async function askCoach(ctx, summary, config) {
 }
 
 /** Stream one provider attempt and return its assembled text. */
-async function streamOnce(ctx, route, summary, config) {
+async function streamOnce(ctx, route, summary, config, timeoutMs = 20000) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20000);
+  let onTimeout;
+  const timeout = new Promise((_, reject) => { onTimeout = reject; });
+  const timer = setTimeout(() => {
+    controller.abort();
+    onTimeout?.(new Error('coach request timed out'));
+  }, timeoutMs);
   let text = '';
   let failure = null;
   try {
-    for await (const chunk of ctx.llm.stream({
+    const stream = ctx.llm.stream({
       provider: route.provider,
       model: route.model,
       system: SYSTEM_PROMPT,
@@ -599,12 +597,21 @@ async function streamOnce(ctx, route, summary, config) {
       maxTokens: config.adviceMaxTokens,
       temperature: 0.6,
       signal: controller.signal,
-    })) {
-      if (chunk?.type === 'text-delta') text += chunk.text ?? '';
-      else if (chunk?.type === 'finish' && chunk.reason?.kind !== 'stop') {
-        failure = chunk.reason?.failure?.message ?? chunk.reason?.kind ?? 'unknown';
+    });
+
+    // An abort signal only helps if the adapter honours it. An adapter that
+    // simply never yields would hang this route forever, so race the
+    // iteration against the same deadline and bail out regardless.
+    const consume = (async () => {
+      for await (const chunk of stream) {
+        if (chunk?.type === 'text-delta') text += chunk.text ?? '';
+        else if (chunk?.type === 'finish' && chunk.reason?.kind !== 'stop') {
+          failure = chunk.reason?.failure?.message ?? chunk.reason?.kind ?? 'unknown';
+        }
       }
-    }
+    })();
+
+    await Promise.race([consume, timeout]);
   } finally {
     clearTimeout(timer);
   }

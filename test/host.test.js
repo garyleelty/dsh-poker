@@ -277,6 +277,43 @@ test('the archive caps at 200 hands and evicts the oldest', async () => {
   assert.equal(after.hands[after.hands.length - 1].id, 201, 'the new hand continues the sequence');
 });
 
+test('the coach asks only the configured default model', async () => {
+  // Falling back to every registered provider meant asking a model the player
+  // never chose — and, with a per-attempt timeout, hanging the route.
+  const asked = [];
+  const { ctx, routes } = fakeContext();
+  ctx.llm = {
+    listProviders: () => ['aaa', 'bbb', 'ccc'].map((id) => ({ id })),
+    stream: async function* stream(opts) {
+      asked.push(opts.provider);
+      yield { type: 'text-delta', text: '跟注' };
+      yield { type: 'finish', reason: { kind: 'stop' } };
+    },
+  };
+  ctx.agentDefaultModel = { currentSelection: () => ({ provider: 'aaa', model: 'm' }) };
+
+  apply(ctx, { opponents: 2, thinkPace: 0 });
+  await settle();
+
+  const advice = (await callRoute(routes, '/poker/advice', {})).body;
+  assert.equal(advice.source, 'llm', 'the default model answers');
+
+  // Now make the default model fail. The fix must give up rather than walk
+  // every other registered provider (which is what used to multiply the
+  // request's timeout by the provider count).
+  asked.length = 0;
+  ctx.llm = {
+    listProviders: () => ['aaa', 'bbb', 'ccc'].map((id) => ({ id })),
+    stream: async function* stream(opts) {
+      asked.push(opts.provider);
+      throw new Error('provider unavailable');
+    },
+  };
+  const failed = (await callRoute(routes, '/poker/advice', {})).body;
+  assert.equal(failed.source, 'heuristic', 'a failing model falls back to rules');
+  assert.deepEqual(asked, ['aaa'], 'only the default provider is ever attempted');
+});
+
 test('advice route falls back to the rules engine without a model', async () => {
   const { ctx, routes } = fakeContext();
   apply(ctx, { opponents: 2, thinkPace: 0 });
