@@ -318,8 +318,11 @@ test('the panel renders a settled hand and a side-pot result', async () => {
     || rendered.includes('跳过')
     || rendered.includes('这一手');
   assert.ok(hasResult, `a settled hand shows its outcome, got: ${rendered.slice(0, 240)}`);
-  // The showdown chrome must never leave betting controls on screen.
-  assert.ok(!rendered.includes('加注到'), 'a settled hand hides the raise slider');
+  // The showdown chrome must never leave the raise slider on screen. (The
+  // string "加注到" can still appear in the archived action log, so scope the
+  // check to the slider's own label element.)
+  const sliders = find(tree, (n) => n.props?.className === 'pk-slider', []);
+  assert.equal(sliders.length, 0, 'a settled hand hides the raise slider');
 });
 
 test('every dictionary key used by the client exists in both locales', () => {

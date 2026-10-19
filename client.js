@@ -1310,7 +1310,9 @@ window.__ModuleLoader__.load({
                 key: 'd',
                 className: 'pk-history__dot' + (entry.seat === 0 ? ' pk-history__dot--me' : ''),
               }),
-              h('span', { key: 't' }, entry.text ?? ''),
+              // Rebuild from structured fields so the log follows the UI
+              // language instead of the Host's Chinese `text`.
+              h('span', { key: 't' }, `${seatName(t, state.seats[entry.seat])} ${actionText(entry, t)}`),
               entry.thought
                 ? h('span', { key: 'w', className: 'pk-history__thought' }, `（${thoughtText(t, entry)}）`)
                 : null,
